@@ -10,6 +10,22 @@
 #import <EXSplashScreen/EXSplashScreenService.h>
 #import <UMCore/UMModuleRegistryProvider.h>
 
+//RN REA V2
+#import <React/RCTCxxBridgeDelegate.h>
+#import <ReactCommon/RCTTurboModuleManager.h>
+#import <React/RCTDataRequestHandler.h>
+#import <React/RCTFileRequestHandler.h>
+#import <React/RCTHTTPRequestHandler.h>
+#import <React/RCTNetworking.h>
+#import <React/RCTLocalAssetImageLoader.h>
+#import <React/RCTGIFImageDecoder.h>
+#import <React/RCTImageLoader.h>
+#import <React/JSCExecutorFactory.h>
+#import <RNReanimated/REATurboModuleProvider.h>
+#import <RNReanimated/REAModule.h>
+// END OF RN REA V2
+
+
 #ifdef FB_SONARKIT_ENABLED
 #import <FlipperKit/FlipperClient.h>
 #import <FlipperKitLayoutPlugin/FlipperKitLayoutPlugin.h>
@@ -29,12 +45,15 @@ static void InitializeFlipper(UIApplication *application) {
 }
 #endif
 
-@interface AppDelegate () <RCTBridgeDelegate>
+@interface AppDelegate() <RCTCxxBridgeDelegate, RCTTurboModuleManagerDelegate> {
+    RCTTurboModuleManager *_turboModuleManager;
+}
 
 @property (nonatomic, strong) UMModuleRegistryAdapter *moduleRegistryAdapter;
 @property (nonatomic, strong) NSDictionary *launchOptions;
 
 @end
+
 
 @implementation AppDelegate
 
@@ -43,7 +62,7 @@ static void InitializeFlipper(UIApplication *application) {
 #ifdef FB_SONARKIT_ENABLED
   InitializeFlipper(application);
 #endif
-  
+  RCTEnableTurboModule(YES);
   self.moduleRegistryAdapter = [[UMModuleRegistryAdapter alloc] initWithModuleRegistryProvider:[[UMModuleRegistryProvider alloc] init]];
   self.launchOptions = launchOptions;
   self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
@@ -94,6 +113,66 @@ static void InitializeFlipper(UIApplication *application) {
   appController.bridge = [self initializeReactNativeApp];
   EXSplashScreenService *splashScreenService = (EXSplashScreenService *)[UMModuleRegistryProvider getSingletonModuleForClass:[EXSplashScreenService class]];
   [splashScreenService showSplashScreenFor:self.window.rootViewController];
+}
+
+// RN REA V2
+- (std::unique_ptr<facebook::react::JSExecutorFactory>)jsExecutorFactoryForBridge:(RCTBridge *)bridge
+{
+  _bridge_reanimated = bridge;
+  _turboModuleManager = [[RCTTurboModuleManager alloc] initWithBridge:bridge
+                                                              delegate:self
+                                                             jsInvoker:bridge.jsCallInvoker];
+ #if RCT_DEV
+  [_turboModuleManager moduleForName:"RCTDevMenu"]; // <- add
+ #endif
+ __weak __typeof(self) weakSelf = self;
+ return std::make_unique<facebook::react::JSCExecutorFactory>([weakSelf, bridge](facebook::jsi::Runtime &runtime) {
+   if (!bridge) {
+     return;
+   }
+   __typeof(self) strongSelf = weakSelf;
+   if (strongSelf) {
+     [strongSelf->_turboModuleManager installJSBindingWithRuntime:&runtime];
+   }
+ });
+}
+
+- (Class)getModuleClassFromName:(const char *)name
+{
+ return facebook::react::REATurboModuleClassProvider(name);
+}
+
+- (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const std::string &)name
+                                                     jsInvoker:(std::shared_ptr<facebook::react::CallInvoker>)jsInvoker
+{
+ return facebook::react::REATurboModuleProvider(name, jsInvoker);
+}
+
+- (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const std::string &)name
+                                                      instance:(id<RCTTurboModule>)instance
+                                                     jsInvoker:(std::shared_ptr<facebook::react::CallInvoker>)jsInvoker
+{
+ return facebook::react::REATurboModuleProvider(name, instance, jsInvoker);
+}
+
+- (id<RCTTurboModule>)getModuleInstanceFromClass:(Class)moduleClass
+{
+ if (moduleClass == RCTImageLoader.class) {
+   return [[moduleClass alloc] initWithRedirectDelegate:nil loadersProvider:^NSArray<id<RCTImageURLLoader>> *{
+     return @[[RCTLocalAssetImageLoader new]];
+   } decodersProvider:^NSArray<id<RCTImageDataDecoder>> *{
+     return @[[RCTGIFImageDecoder new]];
+   }];
+ } else if (moduleClass == RCTNetworking.class) {
+   return [[moduleClass alloc] initWithHandlersProvider:^NSArray<id<RCTURLRequestHandler>> *{
+     return @[
+       [RCTHTTPRequestHandler new],
+       [RCTDataRequestHandler new],
+       [RCTFileRequestHandler new],
+     ];
+   }];
+ }
+ return [moduleClass new];
 }
 
 @end

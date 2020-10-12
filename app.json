@@ -2,11 +2,12 @@
   "name": "rn2-freeze",
   "displayName": "rn2-freeze",
   "expo": {
+    "experiments": {
+      "turboModules": true
+    },
     "name": "rn2-freeze",
     "slug": "rn2-freeze",
     "version": "1.0.0",
-    "assetBundlePatterns": [
-      "**/*"
-    ]
+    "assetBundlePatterns": ["**/*"]
   }
 }
